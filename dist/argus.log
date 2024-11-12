@@ -1,0 +1,4 @@
+2024/11/13 05:30:45 Request: GET /, Forwarded to: http://localhost:4442, Status Code: 200
+2024/11/13 05:30:45 Request processed in 49.5638ms
+2024/11/13 05:30:46 Request: GET /favicon.ico, Forwarded to: http://localhost:4443, Status Code: 200
+2024/11/13 05:30:46 Request processed in 4.0335ms
