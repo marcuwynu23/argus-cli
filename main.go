@@ -43,35 +43,54 @@ func logRequest(r *http.Request, server string, statusCode int) {
 }
 
 func loadBalancer(w http.ResponseWriter, r *http.Request) {
-	// Use atomic operations to get the next server in a round-robin manner
-	nextServer := atomic.AddUint64(&currentServer, 1) % uint64(len(backends))
-	server := backends[nextServer]
+	// Track the number of servers that failed
+	failures := 0
+	var resp *http.Response
+	var err error
+	var server string
 
-	// Forward the request to the selected backend server
-	startTime := time.Now() // Start time for logging duration
-	resp, err := http.Get(server)
-	if err != nil {
-		http.Error(w, "Error connecting to backend server", http.StatusInternalServerError)
-		logRequest(r, server, http.StatusInternalServerError) // Log error
-		return
+	// Loop through all backend servers until one responds successfully
+	for {
+		// Use atomic operations to get the next server in a round-robin manner
+		nextServer := atomic.AddUint64(&currentServer, 1) % uint64(len(backends))
+		server = backends[nextServer]
+
+		// Forward the request to the selected backend server
+		startTime := time.Now() // Start time for logging duration
+		resp, err = http.Get(server)
+		if err == nil {
+			// If the request is successful, break out of the loop
+			defer resp.Body.Close()
+			// Copy the response from the backend server to the client
+			w.WriteHeader(resp.StatusCode)
+			_, err = io.Copy(w, resp.Body) // Correctly copy the response body
+			if err != nil {
+				http.Error(w, "Error writing response", http.StatusInternalServerError)
+				logRequest(r, server, http.StatusInternalServerError) // Log error
+				return
+			}
+
+			// Log the successful request
+			logRequest(r, server, resp.StatusCode)
+
+			// Log the duration of the request
+			duration := time.Since(startTime)
+			log.Printf("Request processed in %v\n", duration)
+			return
+		}
+
+		// If we reach here, it means the request to the current server failed
+		failures++
+
+		// If all servers fail, return an error
+		if failures == len(backends) {
+			http.Error(w, "All backend servers are down", http.StatusServiceUnavailable)
+			logRequest(r, server, http.StatusServiceUnavailable) // Log error for the last tried server
+			return
+		}
+
+		// Otherwise, continue to the next server in the round-robin cycle
 	}
-	defer resp.Body.Close()
-
-	// Copy the response from the backend server to the client
-	w.WriteHeader(resp.StatusCode)
-	_, err = io.Copy(w, resp.Body) // Correctly copy the response body
-	if err != nil {
-		http.Error(w, "Error writing response", http.StatusInternalServerError)
-		logRequest(r, server, http.StatusInternalServerError) // Log error
-		return
-	}
-
-	// Log the successful request
-	logRequest(r, server, resp.StatusCode)
-
-	// Log the duration of the request
-	duration := time.Since(startTime)
-	log.Printf("Request processed in %v\n", duration)
 }
 
 func loadConfig(filename string) (Config, error) {
