@@ -1,4 +1,3 @@
-// load_balancer.go
 package main
 
 import (
@@ -9,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -34,11 +34,7 @@ var (
 )
 
 func logRequest(r *http.Request, server string, statusCode int) {
-	if logFile != nil {
-		log.SetOutput(logFile)
-	} else {
-		log.SetOutput(os.Stdout)
-	}
+	// Log request to both stdout and log file
 	log.Printf("Request: %s %s, Forwarded to: %s, Status Code: %d\n", r.Method, r.URL, server, statusCode)
 }
 
@@ -106,7 +102,21 @@ func loadConfig(filename string) (Config, error) {
 
 func main() {
 	// Load configuration from YAML file
-	configFile := "argus-config.yml"
+	var configFile string
+	if runtime.GOOS == "windows" {
+		// On Windows, use the same directory as the executable
+		executablePath, err := os.Executable()
+		if err != nil {
+			fmt.Printf("Error getting executable path: %v\n", err)
+			os.Exit(1)
+		}
+		configFile = filepath.Join(filepath.Dir(executablePath), "argus-config.yml")
+	} else {
+		// On Linux, use /etc/argus-config.yml
+		configFile = "/etc/argus-config.yml"
+	}
+
+	// Load the configuration
 	config, err := loadConfig(configFile)
 	if err != nil {
 		fmt.Printf("Error loading configuration: %v\n", err)
@@ -120,29 +130,51 @@ func main() {
 	// Set up logging if enabled
 	if config.Logging {
 		if config.LogPath == "" {
-			// Set default log path to the current working directory
-			currentDir, err := os.Getwd()
-			if err != nil {
-				fmt.Printf("Error getting current directory: %v\n", err)
-				os.Exit(1)
+			// Set default log path based on the platform
+			if runtime.GOOS == "linux" {
+				// On Linux, default log path will be /var/log/argus.log
+				config.LogPath = "/var/log/argus.log"
+			} else {
+				// For other platforms, use the current working directory
+				currentDir, err := os.Getwd()
+				if err != nil {
+					fmt.Printf("Error getting current directory: %v\n", err)
+					os.Exit(1)
+				}
+				config.LogPath = filepath.Join(currentDir, "argus.log")
 			}
-			config.LogPath = filepath.Join(currentDir, "argus.log")
 		}
 
-		var err error
-		logFile, err = os.OpenFile(config.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		// Attempt to open the log file
+		logFile, err := os.OpenFile(config.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
+			// Add error logging to stdout to detect if opening the file fails
 			fmt.Printf("Error opening log file: %v\n", err)
+			// Exit the program if the log file can't be opened
 			os.Exit(1)
 		}
+
+		// Log file opened successfully, make sure to close it when done
 		defer logFile.Close()
+
+		// Set log output to both file and stdout
+		multiWriter := io.MultiWriter(logFile, os.Stdout)
+		log.SetOutput(multiWriter)
+
+		// Log an initial message to confirm the log file is being used
+		log.Println("Logging initialized. Logging to:", config.LogPath)
+	} else {
+		// Log to stdout if logging is not enabled
+		log.SetOutput(os.Stdout)
 	}
+
 	// Start the load balancer
 	http.HandleFunc("/", loadBalancer)
 	fmt.Printf("Load balancer is running on %s:%d...\n", config.MainHost, config.MainPort)
 	address := fmt.Sprintf("%s:%d", config.MainHost, config.MainPort)
 	if err := http.ListenAndServe(address, nil); err != nil {
-		fmt.Printf("Error starting server: %v\n", err)
+		// Log any error starting the server
+		log.Printf("Error starting server: %v\n", err)
 		os.Exit(1)
 	}
 }
