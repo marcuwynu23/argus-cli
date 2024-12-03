@@ -1,1 +1,3 @@
 *.exe 
+/releases
+/dist/argus-*
