@@ -1,4 +1,14 @@
-# ARGUS - Load Balancer
+<div align="center">
+  <h1> Argus </h1>
+</div>
+
+<p align="center">
+  <img src="https://img.shields.io/github/stars/marcuwynu23/argus-cli.svg" alt="Stars Badge"/>
+  <img src="https://img.shields.io/github/forks/marcuwynu23/argus-cli.svg" alt="Forks Badge"/>
+  <img src="https://img.shields.io/github/issues/marcuwynu23/argus-cli.svg" alt="Issues Badge"/>
+  <img src="https://img.shields.io/github/license/marcuwynu23/argus-cli.svg" alt="License Badge"/>
+</p>
+
 
 ARGUS is a simple and efficient load balancer written in Go. It distributes incoming HTTP requests across multiple backend servers using a round-robin algorithm, ensuring optimal resource utilization and improved performance.
 
