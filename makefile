@@ -1,24 +1,33 @@
 .PHONY: dev start build dist release clean
 
-# Get the current Git tag
-VERSION := $(shell git describe --tags --abbrev=0)
+# Safe version fallback (no tags = dev)
+VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 
 # Supported platforms and architectures
 PLATFORMS := windows linux
 ARCHS := amd64 386
 
-dev: 
+dev:
 	air
 
 start:
 	go run main.go
 
+build:
+	@mkdir -p bin
+	@echo "Building for $(shell go env GOOS)/$(shell go env GOARCH)"
+	GOOS=$(shell go env GOOS) GOARCH=$(shell go env GOARCH) CGO_ENABLED=0 \
+	go build -ldflags "-X main.version=$(VERSION)" \
+	-o bin/argus$(if $(findstring windows,$(shell go env GOOS)),.exe,) \
+	./main.go
 # Build all distributions (uncompressed)
 dist: $(foreach platform,$(PLATFORMS),$(foreach arch,$(ARCHS),dist-$(platform)-$(arch)))
 
 dist-%:
 	@mkdir -p dist/argus-$*-$(VERSION)
-	GOOS=$(word 1,$(subst -, ,$*)) GOARCH=$(word 2,$(subst -, ,$*)) go build -o dist/argus-$*-$(VERSION)/argus$(if $(findstring windows,$*),.exe)
+	GOOS=$(word 1,$(subst -, ,$*)) GOARCH=$(word 2,$(subst -, ,$*)) \
+	go build -o dist/argus-$*-$(VERSION)/argus$(if $(findstring windows,$*),.exe,)
+
 	cp argus-config.yml dist/argus-$*-$(VERSION)/argus-config.yml
 
 # Release all compressed builds
