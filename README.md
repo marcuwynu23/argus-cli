@@ -11,86 +11,188 @@
 
 Haribon is a simple and efficient load balancer written in Go. It distributes incoming HTTP requests across multiple backend servers using a round-robin algorithm, ensuring optimal resource utilization and improved performance.
 
+---
+
 ## Features
 
 - Round-robin load balancing
-- Simple configuration using YAML
-- Logging of request transactions
-- Easy to set up and use
+- YAML-based configuration
+- Request logging
+- Lightweight and fast
+- Docker-ready deployment
+
+---
 
 ## Prerequisites
 
-- Go (version 1.16 or later) installed on your machine
-- Basic knowledge of HTTP and RESTful services
+- Go 1.23+
+- Docker (optional)
+- Docker Compose (recommended)
 
-## Installation
+---
 
-1. **Clone the repository:**
+## Installation (Local)
 
 ```bash
 git clone https://github.com/marcuwynu23/haribon.git
 cd haribon
-```
-
-2. **Build the application:**
-
-```bash
 go build -o haribon main.go
-```
-
-3. **Run the application:**
-
-```bash
 ./haribon
 ```
 
+---
+
 ## Configuration
 
-Haribon uses a `harbor-config.yml` file for configuration. Create a file named `harbor-config.yml` in the same directory as the executable with the following structure:
+Haribon uses a `harbor-config.yml` file:
 
 ```yml
-host: "localhost"
+host: "0.0.0.0"
 port: 4444
+
 backends:
   - url: "http://localhost:4441"
   - url: "http://localhost:4442"
   - url: "http://localhost:4443"
 ```
 
-## Configuration Parameters
+---
 
-**host**: The hostname or IP address where the load balancer will listen for incoming requests. Default is `localhost`.
+## Logging
 
-**port**: The port number on which the load balancer will run. Default is `4444`.
+Logs are written to:
 
-**backends**: A list of backend servers to which the load balancer will forward requests. Each backend should have a `url` field specifying the full URL of the backend server.
+```
+/tmp/haribon.log
+```
+
+When running in Docker, ensure this path is mounted for persistence.
+
+---
+
+# Docker Usage
+
+## Pull Image (GHCR)
+
+```bash
+docker pull ghcr.io/marcuwynu23/haribon:latest
+```
+
+## Run Container
+
+```bash
+docker run -d \
+  -p 4444:4444 \
+  -v $(pwd)/data:/data \
+  ghcr.io/marcuwynu23/haribon:latest
+```
+
+---
+
+## Environment Variables
+
+| Variable       | Description      | Default                 |
+| -------------- | ---------------- | ----------------------- |
+| HARIBON_CONFIG | Config file path | /data/harbor-config.yml |
+| HARIBON_PORT   | Listening port   | 4444                    |
+| HARIBON_LOG    | Log file path    | /data/logs/harbor.log   |
+
+---
+
+## Docker Compose
+
+Example files are located in:
+
+```
+./docker-compose/
+```
+
+### Start services
+
+```bash
+docker compose up -d
+```
+
+This will:
+
+- build or pull required images
+- start Haribon in detached mode
+- expose service on port 4444
+
+---
+
+### Stop services
+
+```bash
+docker compose down
+```
+
+Stops and removes containers while keeping data intact.
+
+---
+
+### Full cleanup (including volumes)
+
+```bash
+docker compose down -v
+```
+
+Removes containers and all volumes (⚠ data will be deleted).
+
+---
+
+## Folder Structure (Recommended)
+
+Create this structure for Docker/local persistence:
+
+```
+data/
+  harbor-config.yml
+  logs/
+    harbor.log
+```
+
+### Setup
+
+```bash
+mkdir -p data/logs
+touch data/logs/harbor.log
+```
+
+### Copy config
+
+```bash
+cp docker-compose/examples/harbor-config.yml.example data/harbor-config.yml
+```
+
+---
 
 ## Usage
 
-1. Start your backend servers on the specified ports (e.g. `4441`, `4442`, `4443`)
-
-2. Run Haribon:
+Start backend services:
 
 ```bash
-./haribon
+curl http://localhost:4441
+curl http://localhost:4442
+curl http://localhost:4443
 ```
 
-3. Send requests to the load balancer:
+Run Haribon:
 
 ```bash
 curl http://localhost:4444
 ```
 
-Haribon forwards requests to backend servers in a round-robin manner.
+Requests are distributed using round-robin.
 
-## Logging
-
-Haribon logs HTTP request transactions to a file named `load_balancer.log`.
+---
 
 ## Contributing
 
-Contributions are welcome. Feel free to open an issue or submit a pull request.
+Pull requests are welcome. Open issues for bugs or improvements.
+
+---
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+MIT License
