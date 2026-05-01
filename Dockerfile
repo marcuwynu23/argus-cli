@@ -1,6 +1,5 @@
 # Multi-stage Dockerfile for Haribon
-
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23.4-alpine AS builder
 
 WORKDIR /src
 
