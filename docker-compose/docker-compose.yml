@@ -1,0 +1,32 @@
+services:
+  haribon:
+    image: ghcr.io/marcuwynu23/haribon:latest
+    container_name: haribon
+    ports:
+      - "4444:4444"
+    volumes:
+      # config file (edit locally, auto-reload on restart)
+      - ./data/haribon-config.yml:/etc/haribon/haribon-config.yml:Z
+      # optional log file (if logging enabled)
+      - ./data/logs/haribon.log:/var/log/haribon.log:Z
+
+    restart: unless-stopped
+
+  # Example backend services (for testing round-robin)
+  backend1:
+    image: hashicorp/http-echo
+    command: ["-text=backend-1"]
+    ports:
+      - "4441:5678"
+
+  backend2:
+    image: hashicorp/http-echo
+    command: ["-text=backend-2"]
+    ports:
+      - "4442:5678"
+
+  backend3:
+    image: hashicorp/http-echo
+    command: ["-text=backend-3"]
+    ports:
+      - "4443:5678"
