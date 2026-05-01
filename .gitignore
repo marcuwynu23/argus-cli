@@ -3,3 +3,5 @@
 /dist/argus-*
 bin/
 *.log
+data/
+logs/
