@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync/atomic"
 	"time"
+
 	"gopkg.in/yaml.v2"
 )
 
@@ -44,6 +46,20 @@ func loadConfig(filename string) (Config, error) {
 	}
 	err = yaml.Unmarshal(data, &config)
 	return config, err
+}
+
+func applyEnvOverrides(cfg *Config) {
+	if host := os.Getenv("HARIBON_HOST"); host != "" {
+		cfg.MainHost = host
+	}
+
+	if port := os.Getenv("HARIBON_PORT"); port != "" {
+		if p, err := strconv.Atoi(port); err == nil {
+			cfg.MainPort = p
+		} else {
+			log.Printf("invalid HARIBON_PORT: %v", err)
+		}
+	}
 }
 
 func logRequest(r *http.Request, server string, statusCode int) {
@@ -110,9 +126,6 @@ func printHelp() {
 Usage:
   haribon start [options]
 
-Commands:
-  start            Start the load balancer
-
 Options:
   --config string  Path to config file (default: ./haribon-config.yml)
   -h, --help       Show help
@@ -133,6 +146,9 @@ func startCommand(args []string) {
 	if err != nil {
 		log.Fatalf("config error: %v", err)
 	}
+
+	// 🔥 ENV OVERRIDES (Docker/K8s support)
+	applyEnvOverrides(&config)
 
 	if len(config.Backends) == 0 {
 		log.Fatal("no backends defined")
