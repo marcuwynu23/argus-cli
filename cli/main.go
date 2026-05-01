@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -34,8 +35,13 @@ var (
 	currentServer uint64
 
 	httpClient = &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 5 * time.Second,
 	}
+
+	// 🧠 health state
+	backendHealth   = map[string]bool{}
+	healthMutex     sync.RWMutex
+	healthCheckFreq = 5 * time.Second
 )
 
 func loadConfig(filename string) (Config, error) {
@@ -56,8 +62,6 @@ func applyEnvOverrides(cfg *Config) {
 	if port := os.Getenv("HARIBON_PORT"); port != "" {
 		if p, err := strconv.Atoi(port); err == nil {
 			cfg.MainPort = p
-		} else {
-			log.Printf("invalid HARIBON_PORT: %v", err)
 		}
 	}
 }
@@ -70,8 +74,66 @@ func getNextBackend() (string, error) {
 	if len(backends) == 0 {
 		return "", fmt.Errorf("no backends configured")
 	}
-	i := atomic.AddUint64(&currentServer, 1)
-	return backends[int(i)%len(backends)], nil
+
+	for range backends {
+		i := atomic.AddUint64(&currentServer, 1)
+		b := backends[int(i)%len(backends)]
+
+		if isHealthy(b) {
+			return b, nil
+		}
+	}
+
+	return "", fmt.Errorf("no healthy backend available")
+}
+
+func isHealthy(b string) bool {
+	healthMutex.RLock()
+	defer healthMutex.RUnlock()
+	return backendHealth[b]
+}
+
+func setHealth(b string, status bool) {
+	healthMutex.Lock()
+	defer healthMutex.Unlock()
+	backendHealth[b] = status
+}
+
+// 🔥 health checker
+func startHealthChecks() {
+	ticker := time.NewTicker(healthCheckFreq)
+
+	go func() {
+		for range ticker.C {
+			for _, b := range backends {
+				go checkBackend(b)
+			}
+		}
+	}()
+}
+
+func checkBackend(b string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", b, nil)
+	if err != nil {
+		setHealth(b, false)
+		return
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		setHealth(b, false)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
+		setHealth(b, true)
+	} else {
+		setHealth(b, false)
+	}
 }
 
 func loadBalancer(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +142,7 @@ func loadBalancer(w http.ResponseWriter, r *http.Request) {
 	for range backends {
 		server, err := getNextBackend()
 		if err != nil {
-			http.Error(w, "No backend available", http.StatusServiceUnavailable)
+			http.Error(w, "No healthy backend", http.StatusServiceUnavailable)
 			return
 		}
 
@@ -94,6 +156,7 @@ func loadBalancer(w http.ResponseWriter, r *http.Request) {
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
+			setHealth(server, false)
 			continue
 		}
 		defer resp.Body.Close()
@@ -127,7 +190,7 @@ Usage:
   haribon start [options]
 
 Options:
-  --config string  Path to config file (default: ./haribon-config.yml)
+  --config string  Path to config file
   -h, --help       Show help
 `)
 }
@@ -137,7 +200,6 @@ func startCommand(args []string) {
 
 	var configPath string
 	fs.StringVar(&configPath, "config", "", "config file path")
-
 	_ = fs.Parse(args)
 
 	configFile := resolveConfigPath(configPath)
@@ -147,15 +209,11 @@ func startCommand(args []string) {
 		log.Fatalf("config error: %v", err)
 	}
 
-	// 🔥 ENV OVERRIDES (Docker/K8s support)
 	applyEnvOverrides(&config)
-
-	if len(config.Backends) == 0 {
-		log.Fatal("no backends defined")
-	}
 
 	for _, b := range config.Backends {
 		backends = append(backends, b.Host)
+		backendHealth[b.Host] = true // default optimistic
 	}
 
 	if config.Logging {
@@ -179,11 +237,12 @@ func startCommand(args []string) {
 		log.SetOutput(os.Stdout)
 	}
 
+	startHealthChecks()
+
 	addr := fmt.Sprintf("%s:%d", config.MainHost, config.MainPort)
 	http.HandleFunc("/", loadBalancer)
 
 	log.Printf("running on %s\n", addr)
-
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
@@ -196,10 +255,8 @@ func main() {
 	switch os.Args[1] {
 	case "start":
 		startCommand(os.Args[2:])
-
 	case "-h", "--help":
 		printHelp()
-
 	default:
 		fmt.Println("unknown command:", os.Args[1])
 		printHelp()
