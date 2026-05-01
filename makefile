@@ -46,3 +46,6 @@ release-%: dist-%
 clean:
 	rm -rf dist
 	rm -rf releases/*.tar.gz bin
+
+test:
+	go test ./...
