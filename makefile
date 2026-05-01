@@ -3,6 +3,8 @@
 # Safe version fallback (no tags = dev)
 VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 
+SRC := cli/main.go
+
 # Supported platforms and architectures
 PLATFORMS := windows linux
 ARCHS := amd64 386
@@ -11,7 +13,7 @@ dev:
 	air
 
 start:
-	go run main.go
+	go run $(SRC)
 
 build:
 	@mkdir -p bin
@@ -19,14 +21,17 @@ build:
 	GOOS=$(shell go env GOOS) GOARCH=$(shell go env GOARCH) CGO_ENABLED=0 \
 	go build -ldflags "-X main.version=$(VERSION)" \
 	-o bin/haribon$(if $(findstring windows,$(shell go env GOOS)),.exe,) \
-	./main.go
+	$(SRC)
+
 # Build all distributions (uncompressed)
 dist: $(foreach platform,$(PLATFORMS),$(foreach arch,$(ARCHS),dist-$(platform)-$(arch)))
 
 dist-%:
 	@mkdir -p dist/haribon-$*-$(VERSION)
 	GOOS=$(word 1,$(subst -, ,$*)) GOARCH=$(word 2,$(subst -, ,$*)) \
-	go build -o dist/haribon-$*-$(VERSION)/haribon$(if $(findstring windows,$*),.exe,)
+	go build \
+	-o dist/haribon-$*-$(VERSION)/haribon$(if $(findstring windows,$*),.exe,) \
+	$(SRC)
 
 	cp haribon-config.yml dist/haribon-$*-$(VERSION)/haribon-config.yml
 
@@ -40,4 +45,4 @@ release-%: dist-%
 # Clean build artifacts
 clean:
 	rm -rf dist
-	rm -rf releases/*.tar.gz
+	rm -rf releases/*.tar.gz bin
