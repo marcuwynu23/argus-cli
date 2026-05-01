@@ -8,15 +8,16 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
-
 	"gopkg.in/yaml.v2"
 )
+
+// ==========================
+// CONFIG
+// ==========================
 
 type Config struct {
 	MainHost string    `yaml:"host"`
@@ -30,6 +31,10 @@ type Backend struct {
 	Host string `yaml:"url"`
 }
 
+// ==========================
+// GLOBAL STATE
+// ==========================
+
 var (
 	backends      []string
 	currentServer uint64
@@ -38,11 +43,16 @@ var (
 		Timeout: 5 * time.Second,
 	}
 
-	// 🧠 health state
-	backendHealth   = map[string]bool{}
-	healthMutex     sync.RWMutex
+	backendHealth = map[string]bool{}
+	healthMutex   sync.RWMutex
+
 	healthCheckFreq = 5 * time.Second
+	healthTimeout   = 2 * time.Second
 )
+
+// ==========================
+// CONFIG
+// ==========================
 
 func loadConfig(filename string) (Config, error) {
 	var config Config
@@ -66,9 +76,58 @@ func applyEnvOverrides(cfg *Config) {
 	}
 }
 
-func logRequest(r *http.Request, server string, statusCode int) {
-	log.Printf("%s %s -> %s [%d]\n", r.Method, r.URL.Path, server, statusCode)
+// ==========================
+// HEALTH
+// ==========================
+
+func isHealthy(b string) bool {
+	healthMutex.RLock()
+	defer healthMutex.RUnlock()
+	return backendHealth[b]
 }
+
+func setHealth(b string, status bool) {
+	healthMutex.Lock()
+	defer healthMutex.Unlock()
+	backendHealth[b] = status
+}
+
+func startHealthChecks() {
+	go func() {
+		ticker := time.NewTicker(healthCheckFreq)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			for _, b := range backends {
+				go checkBackend(b)
+			}
+		}
+	}()
+}
+
+func checkBackend(b string) {
+	ctx, cancel := context.WithTimeout(context.Background(), healthTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b, nil)
+	if err != nil {
+		setHealth(b, false)
+		return
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		setHealth(b, false)
+		return
+	}
+	defer resp.Body.Close()
+
+	setHealth(b, resp.StatusCode >= 200 && resp.StatusCode < 400)
+}
+
+// ==========================
+// LOAD BALANCER
+// ==========================
 
 func getNextBackend() (string, error) {
 	if len(backends) == 0 {
@@ -87,55 +146,7 @@ func getNextBackend() (string, error) {
 	return "", fmt.Errorf("no healthy backend available")
 }
 
-func isHealthy(b string) bool {
-	healthMutex.RLock()
-	defer healthMutex.RUnlock()
-	return backendHealth[b]
-}
-
-func setHealth(b string, status bool) {
-	healthMutex.Lock()
-	defer healthMutex.Unlock()
-	backendHealth[b] = status
-}
-
-// 🔥 health checker
-func startHealthChecks() {
-	ticker := time.NewTicker(healthCheckFreq)
-
-	go func() {
-		for range ticker.C {
-			for _, b := range backends {
-				go checkBackend(b)
-			}
-		}
-	}()
-}
-
-func checkBackend(b string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", b, nil)
-	if err != nil {
-		setHealth(b, false)
-		return
-	}
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		setHealth(b, false)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
-		setHealth(b, true)
-	} else {
-		setHealth(b, false)
-	}
-}
-
+// SAFE PROXY HANDLER
 func loadBalancer(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 
@@ -147,34 +158,64 @@ func loadBalancer(w http.ResponseWriter, r *http.Request) {
 		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-		defer cancel()
 
 		req, err := http.NewRequestWithContext(ctx, r.Method, server, r.Body)
 		if err != nil {
+			cancel()
 			continue
 		}
 
+		// forward headers safely
+		for k, v := range r.Header {
+			for _, vv := range v {
+				req.Header.Add(k, vv)
+			}
+		}
+
 		resp, err := httpClient.Do(req)
+		cancel()
+
 		if err != nil {
 			setHealth(server, false)
 			continue
 		}
 		defer resp.Body.Close()
 
+		// DO NOT forward hop-by-hop / content-length headers
+		hopHeaders := map[string]bool{
+			"Content-Length":    true,
+			"Transfer-Encoding": true,
+			"Connection":        true,
+		}
+
 		for k, v := range resp.Header {
-			w.Header()[k] = v
+			if hopHeaders[k] {
+				continue
+			}
+			for _, vv := range v {
+				w.Header().Add(k, vv)
+			}
 		}
 
 		w.WriteHeader(resp.StatusCode)
-		io.Copy(w, resp.Body)
 
-		logRequest(r, server, resp.StatusCode)
-		log.Printf("duration=%v\n", time.Since(start))
+		_, copyErr := io.Copy(w, resp.Body)
+		if copyErr != nil {
+			log.Printf("copy error: %v", copyErr)
+		}
+
+		log.Printf("%s %s -> %s [%d] (%v)",
+			r.Method, r.URL.Path, server, resp.StatusCode, time.Since(start))
+
 		return
 	}
 
 	http.Error(w, "All backend servers failed", http.StatusServiceUnavailable)
 }
+
+// ==========================
+// CONFIG PATH
+// ==========================
 
 func resolveConfigPath(cli string) string {
 	if cli != "" {
@@ -182,6 +223,10 @@ func resolveConfigPath(cli string) string {
 	}
 	return "./haribon-config.yml"
 }
+
+// ==========================
+// HELP
+// ==========================
 
 func printHelp() {
 	fmt.Print(`Haribon Load Balancer
@@ -195,6 +240,10 @@ Options:
 `)
 }
 
+// ==========================
+// START
+// ==========================
+
 func startCommand(args []string) {
 	fs := flag.NewFlagSet("start", flag.ExitOnError)
 
@@ -202,9 +251,7 @@ func startCommand(args []string) {
 	fs.StringVar(&configPath, "config", "", "config file path")
 	_ = fs.Parse(args)
 
-	configFile := resolveConfigPath(configPath)
-
-	config, err := loadConfig(configFile)
+	config, err := loadConfig(resolveConfigPath(configPath))
 	if err != nil {
 		log.Fatalf("config error: %v", err)
 	}
@@ -213,38 +260,22 @@ func startCommand(args []string) {
 
 	for _, b := range config.Backends {
 		backends = append(backends, b.Host)
-		backendHealth[b.Host] = true // default optimistic
-	}
-
-	if config.Logging {
-		if config.LogPath == "" {
-			if runtime.GOOS == "linux" {
-				config.LogPath = "/var/log/haribon.log"
-			} else {
-				dir, _ := os.Getwd()
-				config.LogPath = filepath.Join(dir, "haribon.log")
-			}
-		}
-
-		f, err := os.OpenFile(config.LogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err != nil {
-			log.Fatalf("log file error: %v", err)
-		}
-		defer f.Close()
-
-		log.SetOutput(io.MultiWriter(f, os.Stdout))
-	} else {
-		log.SetOutput(os.Stdout)
+		backendHealth[b.Host] = false
 	}
 
 	startHealthChecks()
 
 	addr := fmt.Sprintf("%s:%d", config.MainHost, config.MainPort)
+
 	http.HandleFunc("/", loadBalancer)
 
 	log.Printf("running on %s\n", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
+
+// ==========================
+// MAIN
+// ==========================
 
 func main() {
 	if len(os.Args) < 2 {
