@@ -184,7 +184,7 @@ func resolveConfigPath(cli string) string {
 }
 
 func printHelp() {
-	fmt.Println(`Haribon Load Balancer
+	fmt.Print(`Haribon Load Balancer
 
 Usage:
   haribon start [options]
