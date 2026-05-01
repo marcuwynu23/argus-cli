@@ -1,16 +1,15 @@
 <div align="center">
-  <h1> Argus </h1>
+  <h1> Haribon </h1>
 </div>
 
 <p align="center">
-  <img src="https://img.shields.io/github/stars/marcuwynu23/argus-cli.svg" alt="Stars Badge"/>
-  <img src="https://img.shields.io/github/forks/marcuwynu23/argus-cli.svg" alt="Forks Badge"/>
-  <img src="https://img.shields.io/github/issues/marcuwynu23/argus-cli.svg" alt="Issues Badge"/>
-  <img src="https://img.shields.io/github/license/marcuwynu23/argus-cli.svg" alt="License Badge"/>
+  <img src="https://img.shields.io/github/stars/marcuwynu23/haribon.svg" alt="Stars Badge"/>
+  <img src="https://img.shields.io/github/forks/marcuwynu23/haribon.svg" alt="Forks Badge"/>
+  <img src="https://img.shields.io/github/issues/marcuwynu23/haribon.svg" alt="Issues Badge"/>
+  <img src="https://img.shields.io/github/license/marcuwynu23/haribon.svg" alt="License Badge"/>
 </p>
 
-
-ARGUS is a simple and efficient load balancer written in Go. It distributes incoming HTTP requests across multiple backend servers using a round-robin algorithm, ensuring optimal resource utilization and improved performance.
+Haribon is a simple and efficient load balancer written in Go. It distributes incoming HTTP requests across multiple backend servers using a round-robin algorithm, ensuring optimal resource utilization and improved performance.
 
 ## Features
 
@@ -21,48 +20,33 @@ ARGUS is a simple and efficient load balancer written in Go. It distributes inco
 
 ## Prerequisites
 
-- Go (version 1.16 or later) installed on your machine.
-- Basic knowledge of HTTP and RESTful services.
+- Go (version 1.16 or later) installed on your machine
+- Basic knowledge of HTTP and RESTful services
 
 ## Installation
 
 1. **Clone the repository:**
 
-   ```bash
-   git clone https://github.com/yourusername/argus.git
-   cd argus
-   ```
+```bash
+git clone https://github.com/marcuwynu23/haribon.git
+cd haribon
+```
+
 2. **Build the application:**
-  ```bash
-  go build -o argus main.go
-  ```
+
+```bash
+go build -o haribon main.go
+```
 
 3. **Run the application:**
-  ```bash
-  ./argus
-  ```
+
+```bash
+./haribon
+```
 
 ## Configuration
 
-ARGUS uses a config.yml file for configuration. Create a file named config.yml in the same directory as the executable with the following structure:
-```yml
-host: "localhost"
-port: 4444
-backends:
-  - url: "http://localhost:4441"
-  - url: "http://localhost:4442"
-  - url: "http://localhost:4443"
-```
-
-### Configuration Parameters
-**host**: The hostname or IP address where the load balancer will listen for incoming requests. Default is "localhost".
-
-**port**: The port number on which the load balancer will run. Default is 4444.
-
-**backends**: A list of backend servers to which the load balancer will forward requests. Each backend should have a url field specifying the full URL of the backend server.
-
-
-### Example `config.yml`
+Haribon uses a `harbor-config.yml` file for configuration. Create a file named `harbor-config.yml` in the same directory as the executable with the following structure:
 
 ```yml
 host: "localhost"
@@ -73,31 +57,40 @@ backends:
   - url: "http://localhost:4443"
 ```
 
+## Configuration Parameters
+
+**host**: The hostname or IP address where the load balancer will listen for incoming requests. Default is `localhost`.
+
+**port**: The port number on which the load balancer will run. Default is `4444`.
+
+**backends**: A list of backend servers to which the load balancer will forward requests. Each backend should have a `url` field specifying the full URL of the backend server.
 
 ## Usage
 
-1. Start your backend servers on the specified ports (e.g., 4441, 4442, 4443).
+1. Start your backend servers on the specified ports (e.g. `4441`, `4442`, `4443`)
 
-2. Run the ARGUS load balancer:
-  
-  ```bash
-  ./argus
-  ```
+2. Run Haribon:
+
+```bash
+./haribon
+```
 
 3. Send requests to the load balancer:
-
-You can use curl or any HTTP client to send requests to the load balancer:
 
 ```bash
 curl http://localhost:4444
 ```
-The load balancer will forward the requests to the backend servers in a round-robin manner.
+
+Haribon forwards requests to backend servers in a round-robin manner.
 
 ## Logging
-ARGUS logs all HTTP request transactions to a file named load_balancer.log. You can check this file for details about the requests processed by the load balancer.
+
+Haribon logs HTTP request transactions to a file named `load_balancer.log`.
 
 ## Contributing
-Contributions are welcome! If you have suggestions or improvements, feel free to open an issue or submit a pull request.
+
+Contributions are welcome. Feel free to open an issue or submit a pull request.
 
 ## License
+
 This project is licensed under the MIT License. See the LICENSE file for details.

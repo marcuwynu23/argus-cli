@@ -18,24 +18,24 @@ build:
 	@echo "Building for $(shell go env GOOS)/$(shell go env GOARCH)"
 	GOOS=$(shell go env GOOS) GOARCH=$(shell go env GOARCH) CGO_ENABLED=0 \
 	go build -ldflags "-X main.version=$(VERSION)" \
-	-o bin/argus$(if $(findstring windows,$(shell go env GOOS)),.exe,) \
+	-o bin/haribon$(if $(findstring windows,$(shell go env GOOS)),.exe,) \
 	./main.go
 # Build all distributions (uncompressed)
 dist: $(foreach platform,$(PLATFORMS),$(foreach arch,$(ARCHS),dist-$(platform)-$(arch)))
 
 dist-%:
-	@mkdir -p dist/argus-$*-$(VERSION)
+	@mkdir -p dist/haribon-$*-$(VERSION)
 	GOOS=$(word 1,$(subst -, ,$*)) GOARCH=$(word 2,$(subst -, ,$*)) \
-	go build -o dist/argus-$*-$(VERSION)/argus$(if $(findstring windows,$*),.exe,)
+	go build -o dist/haribon-$*-$(VERSION)/haribon$(if $(findstring windows,$*),.exe,)
 
-	cp argus-config.yml dist/argus-$*-$(VERSION)/argus-config.yml
+	cp haribon-config.yml dist/haribon-$*-$(VERSION)/haribon-config.yml
 
 # Release all compressed builds
 release: $(foreach platform,$(PLATFORMS),$(foreach arch,$(ARCHS),release-$(platform)-$(arch)))
 
 release-%: dist-%
 	@mkdir -p releases
-	tar -czf releases/argus-$*-$(VERSION).tar.gz -C dist argus-$*-$(VERSION)
+	tar -czf releases/haribon-$*-$(VERSION).tar.gz -C dist haribon-$*-$(VERSION)
 
 # Clean build artifacts
 clean:

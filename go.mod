@@ -1,4 +1,4 @@
-module github.com/marcuwynu23/argus-cli
+module github.com/marcuwynu23/haribon
 
 go 1.23.0
 

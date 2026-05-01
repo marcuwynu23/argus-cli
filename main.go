@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"sync/atomic"
 	"time"
-
 	"gopkg.in/yaml.v2"
 )
 
@@ -102,20 +101,20 @@ func resolveConfigPath(cli string) string {
 	if cli != "" {
 		return cli
 	}
-	return "./argus-config.yml"
+	return "./haribon-config.yml"
 }
 
 func printHelp() {
-	fmt.Println(`Argus Load Balancer
+	fmt.Println(`Haribon Load Balancer
 
 Usage:
-  argus start [options]
+  haribon start [options]
 
 Commands:
   start            Start the load balancer
 
 Options:
-  --config string  Path to config file (default: ./argus-config.yml)
+  --config string  Path to config file (default: ./haribon-config.yml)
   -h, --help       Show help
 `)
 }
@@ -146,10 +145,10 @@ func startCommand(args []string) {
 	if config.Logging {
 		if config.LogPath == "" {
 			if runtime.GOOS == "linux" {
-				config.LogPath = "/var/log/argus.log"
+				config.LogPath = "/var/log/haribon.log"
 			} else {
 				dir, _ := os.Getwd()
-				config.LogPath = filepath.Join(dir, "argus.log")
+				config.LogPath = filepath.Join(dir, "haribon.log")
 			}
 		}
 
