@@ -15,7 +15,7 @@ RUN VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo dev) && \
     go build \
       -ldflags="-s -w -X main.version=${VERSION}" \
       -o /out/haribon \
-      ./main.go
+      ./cli
 
 
 FROM alpine:3.20
