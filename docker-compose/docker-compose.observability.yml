@@ -1,0 +1,62 @@
+services:
+
+  haribon:
+    image: ghcr.io/marcuwynu23/haribon:latest
+    container_name: haribon
+    ports:
+      - "4444:4444"
+    volumes:
+      - ./data/haribon-config.yml:/etc/haribon/haribon-config.yml:Z
+      - ./data/logs/haribon.log:/var/log/haribon.log:Z
+    restart: unless-stopped
+
+  backend1:
+    image: hashicorp/http-echo
+    command: ["-text=backend-1"]
+    ports:
+      - "4441:5678"
+
+  backend2:
+    image: hashicorp/http-echo
+    command: ["-text=backend-2"]
+    ports:
+      - "4442:5678"
+
+  backend3:
+    image: hashicorp/http-echo
+    command: ["-text=backend-3"]
+    ports:
+      - "4443:5678"
+
+  # ======================
+  # LOKI STACK
+  # ======================
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./observability/loki-config.yaml:/etc/loki/loki-config.yaml
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: promtail
+    volumes:
+      - ./observability/promtail.yml:/etc/promtail/config.yml
+      - ./data/logs:/var/log
+    command: -config.file=/etc/promtail/config.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - loki
+    volumes:
+      - ./observability/grafana/datasources:/etc/grafana/provisioning/datasources
