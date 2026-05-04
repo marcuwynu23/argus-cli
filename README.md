@@ -39,7 +39,7 @@ go build -o haribon main.go
 
 ## Configuration
 
-### haribon-config.yml
+`haribon-config.yml`
 
 ```yaml
 host: "0.0.0.0"
@@ -74,13 +74,10 @@ backends:
 
 ## Load Balancing Behavior
 
-Haribon uses:
-
 - Round-robin selection
 - Health-aware backend selection
 - Automatic fallback if no healthy backend is available
-
-If health data is empty (startup/testing mode), all backends are treated as healthy.
+- If health data is empty (startup/testing mode), all backends are treated as healthy
 
 ---
 
@@ -127,7 +124,7 @@ Haribon outputs structured JSON logs compatible with Loki and Promtail.
 docker pull ghcr.io/marcuwynu23/haribon:latest
 ```
 
-### Run
+### Run container
 
 ```bash
 docker run -d -p 4444:4444 ghcr.io/marcuwynu23/haribon:latest
@@ -140,7 +137,8 @@ docker run -d -p 4444:4444 ghcr.io/marcuwynu23/haribon:latest
 ```
 data/
   haribon-config.yml
-  haribon.log
+  logs/
+    haribon.log
 ```
 
 ---
@@ -155,15 +153,60 @@ Requests are distributed using round-robin scheduling with health filtering.
 
 ---
 
-## Observability Stack
+## Observability Stack (Loki + Promtail + Grafana)
 
-Haribon is designed to integrate with:
+Haribon includes a full observability stack via `docker-compose.observability.yml`.
 
-- Grafana
-- Loki
-- Promtail
+### Architecture
 
-Logs are structured for direct ingestion.
+```
+Haribon → JSON logs → Promtail → Loki → Grafana
+```
+
+### Start stack
+
+```bash
+docker compose -f docker-compose.observability.yml up -d
+```
+
+### Services
+
+#### Haribon
+
+- Load balancer on port 4444
+- Writes structured logs to `/var/log/haribon.log`
+
+#### Backend services
+
+- backend1: 4441
+- backend2: 4442
+- backend3: 4443
+
+#### Loki
+
+- Log storage endpoint: [http://localhost:3100](http://localhost:3100)
+
+#### Promtail
+
+- Tails `./data/logs/haribon.log`
+- Forwards logs to Loki
+
+#### Grafana
+
+- [http://localhost:3000](http://localhost:3000)
+- Default login: admin / admin
+
+### Query logs
+
+```logql
+{job="haribon"}
+```
+
+Filter errors:
+
+```logql
+{job="haribon"} |= "error"
+```
 
 ---
 
