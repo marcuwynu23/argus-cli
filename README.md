@@ -9,46 +9,43 @@
   <img src="https://img.shields.io/github/license/marcuwynu23/haribon.svg" alt="License Badge"/>
 </p>
 
-Haribon is a simple and efficient load balancer written in Go. It distributes incoming HTTP requests across multiple backend servers using a round-robin algorithm, ensuring optimal resource utilization and improved performance.
+Haribon is a lightweight Go-based load balancer designed for simplicity, observability, and production readiness.
+It supports round-robin routing, health-aware balancing, structured logging, and Loki/Promtail integration.
 
 ---
 
 ## Features
 
 - Round-robin load balancing
-- YAML-based configuration
-- Request logging
-- Lightweight and fast
-- Docker-ready deployment
+- Health-aware routing (skip unhealthy backends)
+- Structured JSON logging (Loki-ready)
+- Promtail-compatible log output
+- Environment variable overrides
+- Safe HTTP reverse proxying
+- Automatic fallback logging (stdout if file fails)
+- Configurable log file creation and directory auto-creation
 
 ---
 
-## Prerequisites
-
-- Go 1.23+
-- Docker (optional)
-- Docker Compose (recommended)
-
----
-
-## Installation (Local)
+## Installation
 
 ```bash
 git clone https://github.com/marcuwynu23/haribon.git
 cd haribon
 go build -o haribon main.go
-./haribon
 ```
 
 ---
 
 ## Configuration
 
-Haribon uses a `harbor-config.yml` file:
+### haribon-config.yml
 
-```yml
+```yaml
 host: "0.0.0.0"
 port: 4444
+
+logging: true
 
 backends:
   - url: "http://localhost:4441"
@@ -58,138 +55,144 @@ backends:
 
 ---
 
-## Logging
+## Environment Overrides
 
-Logs are written to:
-
-```
-/tmp/haribon.log
-```
-
-When running in Docker, ensure this path is mounted for persistence.
+| Variable     | Description    | Example |
+| ------------ | -------------- | ------- |
+| HARIBON_HOST | Bind host      | 0.0.0.0 |
+| HARIBON_PORT | Listening port | 4444    |
 
 ---
 
-# Docker Usage
+## Run
 
-## Pull Image (GHCR)
+```bash
+./haribon start --config haribon-config.yml
+```
+
+---
+
+## Load Balancing Behavior
+
+Haribon uses:
+
+- Round-robin selection
+- Health-aware backend selection
+- Automatic fallback if no healthy backend is available
+
+If health data is empty (startup/testing mode), all backends are treated as healthy.
+
+---
+
+## Health Checking
+
+- Backend health state stored in memory
+- Unhealthy backends are skipped automatically
+- Only healthy services receive traffic
+
+---
+
+## Logging
+
+Haribon outputs structured JSON logs compatible with Loki and Promtail.
+
+### Example log
+
+```json
+{
+  "time": "2026-05-04T01:31:55.3551454Z",
+  "method": "GET",
+  "path": "/",
+  "backend": "http://localhost:4442",
+  "status": 200,
+  "duration_ms": 5,
+  "level": "info"
+}
+```
+
+### Logging behavior
+
+- Logs are written in JSON format
+- Supports stdout and file output simultaneously
+- Automatically creates log file if missing
+- Falls back to stdout if file cannot be created
+
+---
+
+## Docker Usage
+
+### Pull image
 
 ```bash
 docker pull ghcr.io/marcuwynu23/haribon:latest
 ```
 
-## Run Container
+### Run
 
 ```bash
-docker run -d \
-  -p 4444:4444 \
-  -v $(pwd)/data:/data \
-  ghcr.io/marcuwynu23/haribon:latest
+docker run -d -p 4444:4444 ghcr.io/marcuwynu23/haribon:latest
 ```
 
 ---
 
-## Environment Variables
-
-| Variable       | Description      | Default                 |
-| -------------- | ---------------- | ----------------------- |
-| HARIBON_CONFIG | Config file path | /data/harbor-config.yml |
-| HARIBON_PORT   | Listening port   | 4444                    |
-| HARIBON_LOG    | Log file path    | /data/logs/harbor.log   |
-
----
-
-## Docker Compose
-
-Example files are located in:
-
-```
-./docker-compose/
-```
-
-### Start services
-
-```bash
-docker compose up -d
-```
-
-This will:
-
-- build or pull required images
-- start Haribon in detached mode
-- expose service on port 4444
-
----
-
-### Stop services
-
-```bash
-docker compose down
-```
-
-Stops and removes containers while keeping data intact.
-
----
-
-### Full cleanup (including volumes)
-
-```bash
-docker compose down -v
-```
-
-Removes containers and all volumes (⚠ data will be deleted).
-
----
-
-## Folder Structure (Recommended)
-
-Create this structure for Docker/local persistence:
+## Recommended Structure
 
 ```
 data/
-  harbor-config.yml
-  logs/
-    harbor.log
-```
-
-### Setup
-
-```bash
-mkdir -p data/logs
-touch data/logs/harbor.log
-```
-
-### Copy config
-
-```bash
-cp docker-compose/examples/harbor-config.yml.example data/harbor-config.yml
+  haribon-config.yml
+  haribon.log
 ```
 
 ---
 
-## Usage
-
-Start backend services:
-
-```bash
-curl http://localhost:4441
-curl http://localhost:4442
-curl http://localhost:4443
-```
-
-Run Haribon:
+## Example Request
 
 ```bash
 curl http://localhost:4444
 ```
 
-Requests are distributed using round-robin.
+Requests are distributed using round-robin scheduling with health filtering.
 
 ---
 
-## Contributing
+## Observability Stack
 
-Pull requests are welcome. Open issues for bugs or improvements.
+Haribon is designed to integrate with:
+
+- Grafana
+- Loki
+- Promtail
+
+Logs are structured for direct ingestion.
+
+---
+
+## Testing
+
+```bash
+go test ./...
+```
+
+---
+
+## Architecture Notes
+
+- Stateless proxy core
+- Atomic counter for routing
+- Mutex-protected log writer
+- RWMutex backend health store
+- Context-based request cancellation
+
+---
+
+## Roadmap
+
+- Active health check scheduler
+- Retry policy per backend
+- Circuit breaker
+- Metrics endpoint (/metrics)
+- Prometheus integration
+- Weighted load balancing
 
 ---
 
